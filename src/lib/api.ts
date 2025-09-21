@@ -11,6 +11,10 @@ export type ProjectDTO = {
   description?: string | null
   createdAt: string
   updatedAt: string
+    _count?: {
+    tasks: number
+    members: number
+  }
 }
 
 export function useProjects() {
@@ -143,4 +147,5 @@ export function useUpdateTask() {
       onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
     })
   }
+  
   

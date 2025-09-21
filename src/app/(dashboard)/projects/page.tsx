@@ -13,7 +13,9 @@ import { useProjects, useCreateProject } from "@/lib/api"
 
 const STATUSES = ["Active", "Planning", "OnHold", "Done"] as const
 
-function statusVariant(s: (typeof STATUSES)[number]): "default" | "secondary" | "destructive" | "outline" {
+function statusVariant(
+  s: (typeof STATUSES)[number]
+): "default" | "secondary" | "destructive" | "outline" {
   switch (s) {
     case "Active":
       return "default"
@@ -27,7 +29,7 @@ function statusVariant(s: (typeof STATUSES)[number]): "default" | "secondary" | 
 }
 
 export default function ProjectsPage() {
-  const { data, isLoading, error } = useProjects()
+  const { data: projects, isLoading, error } = useProjects()
   const create = useCreateProject()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<{
@@ -45,6 +47,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Projects</h1>
         <Button onClick={() => setOpen((o) => !o)}>
@@ -52,6 +55,7 @@ export default function ProjectsPage() {
         </Button>
       </div>
 
+      {/* Create form */}
       {open && (
         <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border p-4">
           <div className="space-y-2">
@@ -94,6 +98,7 @@ export default function ProjectsPage() {
         </form>
       )}
 
+      {/* Loading state */}
       {isLoading && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -112,28 +117,36 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      {/* Error */}
       {error && <p className="text-red-500">Failed to load projects</p>}
 
-      {!isLoading && data && (
+      {/* List */}
+      {!isLoading && projects && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {data.map((p) => (
-            <Link key={p.id} href={`/projects/${p.id}`} className="block">
+          {projects.map((project) => (
+            <Link key={project.id} href={`/projects/${project.id}`} className="block">
               <Card className="transition-shadow hover:shadow-md">
                 <CardHeader className="flex flex-row items-start justify-between">
-                  <CardTitle>{p.name}</CardTitle>
-                  <Badge variant={statusVariant(p.status as any)} className="shrink-0">
-                    {p.status}
+                  <CardTitle>{project.name}</CardTitle>
+                  <Badge variant={statusVariant(project.status as any)} className="shrink-0">
+                    {project.status}
                   </Badge>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground line-clamp-3">
-                    {p.description ?? "—"}
+                    {project.description ?? "—"}
                   </p>
+
+                  {/* NEW: counts */}
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Members: {project._count?.members ?? 0} • Tasks: {project._count?.tasks ?? 0}
+                  </div>
                 </CardContent>
               </Card>
             </Link>
           ))}
-          {data.length === 0 && (
+
+          {projects.length === 0 && (
             <Card>
               <CardContent className="p-6 text-center text-muted-foreground">
                 No projects yet — click <span className="font-medium">New Project</span>.
