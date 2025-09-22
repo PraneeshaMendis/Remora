@@ -13,10 +13,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setLoading(true)
 
     const result = await signIn("credentials", {
       redirect: false,
@@ -24,42 +26,49 @@ export default function LoginPage() {
       password,
     })
 
+    setLoading(false)
+
     if (result?.error) {
       setError("Invalid email or password")
-    } else {
-      router.push("/dashboard") // redirect to dashboard
+      return
     }
+    router.push("/dashboard")
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <Card className="w-[400px]">
+    <div className="min-h-screen grid place-items-center p-6">
+      <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Director Login</CardTitle>
+          <CardTitle className="text-2xl">Director Login</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label>Email</Label>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
               <Input
+                id="email"
                 type="email"
+                placeholder="director@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoFocus
               />
             </div>
-            <div>
-              <Label>Password</Label>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
               <Input
+                id="password"
                 type="password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <Button type="submit" className="w-full">
-              Login
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
         </CardContent>

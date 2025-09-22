@@ -1,34 +1,25 @@
-import NextAuth from "next-auth"
-import Credentials from "next-auth/providers/credentials"
-import { NextResponse } from "next/server"
+// src/app/api/auth/[...nextauth]/route.ts
+import NextAuth, { type NextAuthOptions } from "next-auth"
+import CredentialsProvider from "next-auth/providers/credentials"
 
-const handler = NextAuth({
+export const authOptions: NextAuthOptions = {
   providers: [
-    Credentials({
+    CredentialsProvider({
       name: "Director Login",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(creds) {
-        const email = creds?.email?.toString() ?? ""
-        const password = creds?.password?.toString() ?? ""
+      async authorize(credentials) {
+        const email = credentials?.email ?? ""
+        const password = credentials?.password ?? ""
 
-        // Simple “directors only” rule for now:
-        // accept only the configured director account
         const directorEmail = process.env.DIRECTOR_EMAIL ?? ""
         const directorPassword = process.env.DIRECTOR_PASSWORD ?? ""
 
-        if (!directorEmail || !directorPassword) {
-          // Developer mistake: missing env vars
-          throw new Error("Server missing DIRECTOR_* env vars")
-        }
-
         if (email === directorEmail && password === directorPassword) {
-          // minimal user object; can be expanded later
           return { id: "director", name: "Director", email, role: "director" as const }
         }
-
         return null
       },
     }),
@@ -40,10 +31,15 @@ const handler = NextAuth({
       return token
     },
     async session({ session, token }) {
-      ;(session as any).role = token.role ?? "user"
+      ;(session as any).role = (token as any).role ?? "user"
       return session
     },
   },
-})
+  pages: {
+    signIn: "/login", // send unauthenticated users here
+  },
+}
 
+// ✅ v4 route handlers export pattern:
+const handler = NextAuth(authOptions)
 export { handler as GET, handler as POST }
