@@ -31,10 +31,12 @@ model Task {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String // ✅ for login with NextAuth
+  role         Role     @default(CONSULTANT) // ✅ director, manager, consultant
+  createdAt    DateTime @default(now())
 
   projects ProjectMember[]
 }
@@ -42,11 +44,17 @@ model User {
 model ProjectMember {
   projectId  String
   userId     String
-  role       String?
+  role       String? // e.g., "Manager", "Consultant"
   assignedAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([projectId, userId])
+}
+
+enum Role {
+  DIRECTOR
+  MANAGER
+  CONSULTANT
 }
