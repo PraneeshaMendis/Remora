@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -5,6 +6,32 @@ generator client {
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DIRECTOR
+  MANAGER
+  LEAD
+  CONSULTANT
+  CLIENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+  invites      Invite[] @relation("UserInvites")
+
+  // relations
+  projects        ProjectMember[]
+  logs            TaskLog[]
+  uploads         Attachment[]     @relation("UserUploads")
+  authoredReviews DocumentReview[] @relation("AuthorReviews")
+  reviewedReviews DocumentReview[] @relation("ReviewerReviews")
+  notifications   Notification[]
 }
 
 model Project {
@@ -17,6 +44,34 @@ model Project {
 
   tasks   Task[]
   members ProjectMember[]
+  phases  Phase[]
+}
+
+model ProjectMember {
+  projectId  String
+  userId     String
+  role       String?
+  assignedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model Phase {
+  id        String   @id @default(cuid())
+  name      String
+  order     Int
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, order])
+  @@index([projectId])
 }
 
 model Task {
@@ -26,35 +81,115 @@ model Task {
   due       DateTime?
   createdAt DateTime  @default(now())
 
+  // 🔒 required now (it was optional before)
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Optional: tasks may or may not belong to a phase
+  phaseId String?
+  phase   Phase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+
+  logs        TaskLog[]
+  attachments Attachment[]
+  reviews     DocumentReview[]
+
+  @@index([projectId])
+  @@index([projectId, phaseId])
+  @@index([phaseId])
+}
+
+model TaskLog {
+  id         String   @id @default(cuid())
+  date       DateTime @default(now())
+  content    String
+  attachment String?
+
+  taskId String
+  userId String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+}
+
+model Attachment {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  uploadedBy String
+  uploader   User   @relation("UserUploads", fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  filename  String
+  url       String
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([uploadedBy])
+}
+
+enum ReviewStatus {
+  PENDING
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+model DocumentReview {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // author optional so SetNull is valid
+  authorId String?
+  author   User?   @relation("AuthorReviews", fields: [authorId], references: [id], onDelete: SetNull)
+
+  reviewerId String?
+  reviewer   User?   @relation("ReviewerReviews", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  status       ReviewStatus @default(PENDING)
+  comment      String?
+  correctedUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([authorId])
+  @@index([reviewerId])
+}
+
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      String
+  message   String
   projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId    String?
+
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([taskId])
 }
 
-model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  passwordHash String // ✅ for login with NextAuth
-  role         Role     @default(CONSULTANT) // ✅ director, manager, consultant
-  createdAt    DateTime @default(now())
+model Invite {
+  id        String    @id @default(cuid())
+  email     String
+  role      Role
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
-  projects ProjectMember[]
-}
+  userId String?
+  user   User?   @relation("UserInvites", fields: [userId], references: [id], onDelete: SetNull)
 
-model ProjectMember {
-  projectId  String
-  userId     String
-  role       String? // e.g., "Manager", "Consultant"
-  assignedAt DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([projectId, userId])
-}
-
-enum Role {
-  DIRECTOR
-  MANAGER
-  CONSULTANT
+  @@index([email])
+  @@index([expiresAt])
 }

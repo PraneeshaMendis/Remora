@@ -1,60 +1,69 @@
 import { prisma } from "@/lib/db"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import AddTaskInline from "./task-inline"
-import StatusSelect from "./status-select"
-import TasksTable from "./tasks-table"
 import MembersPanel from "./members-panel"
+import PhasesPanel from "./phases-panel"
+import PhaseList from "./phase-list"
 
-
-// 👇 params is a Promise in Next 15 server components
 export default async function ProjectDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
-  const { id } = await params // ✅ await it
+  // Next 15 dynamic params are a Promise
+  const { id } = await params
 
   const project = await prisma.project.findUnique({
     where: { id },
-    include: { tasks: { orderBy: { createdAt: "desc" } } },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      status: true,
+      phases: {
+        orderBy: { order: "asc" },          // ensure stable order
+        select: { id: true, name: true, order: true },
+      },
+    },
   })
 
   if (!project) notFound()
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{project.name}</h1>
-          <p className="break-all text-sm text-muted-foreground">ID: {project.id}</p>
+          <p className="text-sm text-muted-foreground break-all">ID: {project.id}</p>
+          <p className="text-sm text-muted-foreground">
+            Status: <span className="font-medium">{project.status}</span>
+          </p>
         </div>
-        <StatusSelect id={project.id} initial={project.status as any} />
+        <Link href="/projects" className="text-sm underline underline-offset-4">
+          ← Back to Projects
+        </Link>
       </div>
-<MembersPanel projectId={project.id} />
-      <Card>
-        <CardHeader>
-          <CardTitle>Tasks</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <AddTaskInline projectId={project.id} />
-          <TasksTable
-            initial={project.tasks.map((t: { id: string; title: string; done: boolean; due: Date | null }) => ({
-              id: t.id,
-              title: t.title,
-              done: t.done,
-              due: t.due ? t.due.toISOString() : null,
-            }))}
-          />
-          <div className="flex justify-end">
-            <Link href="/projects">
-              <Button variant="outline">Back to Projects</Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+
+      {project.description ? (
+        <p className="text-sm">{project.description}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground">No description provided.</p>
+      )}
+
+      {/* Members */}
+      <MembersPanel projectId={project.id} />
+
+      {/* Phases: create/reorder/etc. (expects order) */}
+      <PhasesPanel
+        projectId={project.id}
+        initial={project.phases.map((p) => ({ id: p.id, name: p.name, order: p.order }))}
+      />
+
+      {/* Tasks inside each phase (needs only id + name) */}
+      <PhaseList
+        projectId={project.id}
+        phases={project.phases.map((p) => ({ id: p.id, name: p.name }))}
+      />
     </div>
   )
 }

@@ -1,96 +1,63 @@
-import { NextRequest, NextResponse } from "next/server"
+// src/app/api/projects/[id]/tasks/route.ts
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { z } from "zod"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
-export const dynamic = "force-dynamic"
+type Ctx = { params: Promise<{ id: string }> }
+type SessionUser = { id: string; role: "DIRECTOR" | "MANAGER" | "CONSULTANT" }
+type SessionLike = { user?: SessionUser } | null
 
-/* ---------- Schemas ---------- */
+// GET: list tasks for a project
+export async function GET(_req: Request, ctx: Ctx) {
+  const { id } = await ctx.params // ✅ await params
+  const session = (await getServerSession(authOptions as any)) as SessionLike
+  const role = session?.user?.role
+  const userId = session?.user?.id
 
-// create task
-const createSchema = z.object({
-  title: z.string().min(1),
-  projectId: z.string().optional().nullable(), // accept any string id
-  due: z.string().datetime().optional().nullable(),
-})
+  if (!role) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-// update task (id is any non-empty string; fields optional)
-const patchSchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1).optional(),
-  done: z.boolean().optional(),
-  projectId: z.string().optional().nullable(),
-  due: z.string().datetime().optional().nullable(),
-})
+  // Consultants must be members of the project
+  if (role === "CONSULTANT") {
+    const membership = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId: id, userId: userId! } },
+      select: { projectId: true },
+    })
+    if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
-// delete task
-const deleteSchema = z.object({
-  id: z.string().min(1),
-})
-
-/* ---------- Routes ---------- */
-
-export async function GET() {
   const tasks = await prisma.task.findMany({
+    where: { projectId: id },
     orderBy: { createdAt: "desc" },
-    include: { project: { select: { id: true, name: true } } },
+    select: { id: true, title: true, done: true, due: true },
   })
+
   return NextResponse.json(tasks)
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json().catch(() => ({}))
-    const parsed = createSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
-    }
-    const { title, projectId, due } = parsed.data
-    const task = await prisma.task.create({
-      data: { title, projectId: projectId ?? null, due: due ? new Date(due) : null },
-    })
-    return NextResponse.json(task, { status: 201 })
-  } catch (err: any) {
-    console.error("POST /api/tasks failed:", err)
-    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })
-  }
-}
+// POST: create task (Directors/Managers only)
+export async function POST(req: Request, ctx: Ctx) {
+  const { id } = await ctx.params // ✅ await params
+  const session = (await getServerSession(authOptions as any)) as SessionLike
+  const role = session?.user?.role
 
-export async function PATCH(req: NextRequest) {
-  try {
-    const body = await req.json().catch(() => ({}))
-    const parsed = patchSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
-    }
-    const { id, title, done, projectId, due } = parsed.data
-    const task = await prisma.task.update({
-      where: { id },
-      data: {
-        ...(title !== undefined ? { title } : {}),
-        ...(done !== undefined ? { done } : {}),
-        ...(projectId !== undefined ? { projectId } : {}),
-        ...(due !== undefined ? { due: due ? new Date(due) : null } : {}),
-      },
-    })
-    return NextResponse.json(task)
-  } catch (err: any) {
-    console.error("PATCH /api/tasks failed:", err)
-    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })
+  if (!role || !["DIRECTOR", "MANAGER"].includes(role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
-}
 
-export async function DELETE(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get("id")
-    const parsed = deleteSchema.safeParse({ id: id ?? "" })
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
-    }
-    await prisma.task.delete({ where: { id: parsed.data.id } })
-    return new NextResponse(null, { status: 204 })
-  } catch (err: any) {
-    console.error("DELETE /api/tasks failed:", err)
-    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })
+  const body = await req.json().catch(() => null)
+  if (!body?.title) {
+    return NextResponse.json({ error: "Missing title" }, { status: 400 })
   }
+
+  const task = await prisma.task.create({
+    data: {
+      projectId: id,
+      title: String(body.title),
+      due: body.due ? new Date(body.due) : null,
+    },
+    select: { id: true, title: true, done: true, due: true },
+  })
+
+  return NextResponse.json(task, { status: 201 })
 }

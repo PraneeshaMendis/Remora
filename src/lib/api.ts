@@ -147,5 +147,34 @@ export function useUpdateTask() {
       onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
     })
   }
+
+  // --- Review requests via TaskLog -------------------------------------------
+export function useSendForReview() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { projectId: string; taskId: string; note?: string }) => {
+      const { projectId, taskId, note } = args
+      const res = await fetch(`/api/projects/${projectId}/tasks/${taskId}/logs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: new Date().toISOString(),
+          content: `[REVIEW] ${note ?? ""}`.trim(),
+          // attachment: optional — add later if you want
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.error || "Failed to send for review")
+      }
+      return res.json()
+    },
+    onSuccess: (_data, vars) => {
+      // refresh the task logs list if your UI queries it
+      qc.invalidateQueries({ queryKey: ["task-logs", vars.taskId] })
+    },
+  })
+}
+
   
   
